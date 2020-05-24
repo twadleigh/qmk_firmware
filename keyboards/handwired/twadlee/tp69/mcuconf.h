@@ -17,7 +17,7 @@
 #ifndef _MCUCONF_H_
 #define _MCUCONF_H_
 
-#define KL2x_MCUCONF
+#define K20x_MCUCONF
 
 /*
  * HAL driver system settings.
@@ -30,7 +30,7 @@
 /*
  * SERIAL driver system settings.
  */
-#define KINETIS_SERIAL_USE_UART0 FALSE
+#define KINETIS_SERIAL_USE_UART0 TRUE
 
 /*
  * USB driver settings
@@ -40,6 +40,6 @@
 /* Need to redefine this, since the default (configured for K20x) might not apply
  *   2 for Teensy LC
  *   5 for Teensy 3.x */
-#define KINETIS_USB_USB0_IRQ_PRIORITY 2
+#define KINETIS_USB_USB0_IRQ_PRIORITY 5
 
 #endif /* _MCUCONF_H_ */
