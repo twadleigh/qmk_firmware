@@ -28,8 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define DESCRIPTION A custom 69-key 65% keyboard with a trackpoint under keycap
 
 /* key matrix size */
-#define MATRIX_ROWS 10
-#define MATRIX_COLS 8
+#define MATRIX_ROWS 5
+#define MATRIX_COLS 16
 
 /*
  * Keyboard Matrix Assignments
@@ -40,40 +40,39 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * DIODE_DIRECTION: COL2ROW = COL = Anode (+), ROW = Cathode (-, marked on diode)
  *                  ROW2COL = ROW = Anode (+), COL = Cathode (-, marked on diode)
  */
-/*                        19  17  16  15  14   2   8   6   7   9 */
-//#define MATRIX_ROW_PINS { B2, B1, B0, C0, D1, D0, D3, D4, D2, C3 }
-/*                        20  21  18    0    1   3   4   5 */
-//#define MATRIX_COL_PINS { D5, D6, A4, B16, B17, A1, A2, D7 }
+
 #define MATRIX_ROW_PINS {                       \
-    LINE_PIN19,                                 \
-    LINE_PIN17,                                 \
-    LINE_PIN16,                                 \
-    LINE_PIN15,                                 \
-    LINE_PIN14,                                 \
-    LINE_PIN2,                                  \
-    LINE_PIN8,                                  \
-    LINE_PIN6,                                  \
-    LINE_PIN7,                                  \
-    LINE_PIN9                                   \
+    LINE_PIN9,                                  \
+    LINE_PIN10,                                 \
+    LINE_PIN11,                                 \
+    LINE_PIN12,                                 \
+    LINE_PIN14                                  \
 }
 
 #define MATRIX_COL_PINS {                       \
-    LINE_PIN20,                                 \
-    LINE_PIN21,                                 \
-    LINE_PIN18,                                 \
-    /* chibios-contrib patch pending */         \
-    PAL_LINE(TEENSY_PIN0_IOPORT, TEENSY_PIN0),  \
-    LINE_PIN1,                                  \
+    LINE_PIN29,                                 \
+    LINE_PIN30,                                 \
+    LINE_PIN31,                                 \
+    LINE_PIN32,                                 \
+    LINE_PIN33,                                 \
+    LINE_PIN2,                                  \
     LINE_PIN3,                                  \
     LINE_PIN4,                                  \
-    LINE_PIN5                                   \
+    LINE_PIN6,                                  \
+    LINE_PIN7,                                  \
+    LINE_PIN8,                                  \
+    LINE_PIN24,                                 \
+    LINE_PIN25,                                 \
+    LINE_PIN26,                                 \
+    LINE_PIN27,                                 \
+    LINE_PIN28                                  \
 }
 
 #define UNUSED_PINS
 
 // for trackpoint:
-#define PS2_DATA LINE_PIN22
-#define PS2_CLOCK LINE_PIN23  // requires interrupt capability
+#define PS2_DATA LINE_PIN0
+#define PS2_CLOCK LINE_PIN1
 
 /* COL2ROW, ROW2COL*/
 #define DIODE_DIRECTION COL2ROW
@@ -81,11 +80,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 /*
  * Split Keyboard specific options, make sure you have 'SPLIT_KEYBOARD = yes' in your rules.mk, and define SOFT_SERIAL_PIN.
  */
-#define SOFT_SERIAL_PIN D0  // or D1, D2, D3, E6
+// #define SOFT_SERIAL_PIN D0  // or D1, D2, D3, E6
 
-// #define BACKLIGHT_PIN B7
-// #define BACKLIGHT_BREATHING
-// #define BACKLIGHT_LEVELS 3
+#define BACKLIGHT_BREATHING 1
+#define BREATHING_PERIOD 10
+#define BACKLIGHT_LEVELS 7
+#define BACKLIGHT_ON_STATE 1
 
 // #define RGB_DI_PIN E2
 // #ifdef RGB_DI_PIN

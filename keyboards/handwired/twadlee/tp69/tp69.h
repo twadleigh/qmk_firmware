@@ -28,21 +28,16 @@
  */
 
 #define LAYOUT( \
-    k00, k01, k02, k03, k04, k05, k06, k07, k50, k51, k52, k53, k54, k55, k56, k57, \
-      k10, k11, k13, k14, k15, k16, k17, k60, k61, k62, k63, k64, k65, k66, k67, \
-        k20, k21, k23, k24, k25, k27, /**/ k70, k71, k72, k73, k74, k75, k77, \
-          k30, k32, k33, k34, k35, k36, k37, k81, k82, k83, k84, k85, k86, \
-            k40, k41, k43, k44, k46, k47, k91, k92, k94, k95, k96, k97 \
+    k00, k01, k02, k03, k04, k05, k06, k07, k08, k09, k0a, k0b, k0c, k0d, k0e, k0f, \
+      k10, k12, k13, k14, k15, k16, k17, k18, k19, k1a, k1b, k1c, k1d, k1e, k1f, \
+        k20, k22, k23, k24, k25, k27, /**/ k28, k29, k2a, k2b, k2c, k2d, k2e, \
+          k30, k32, k33, k34, k35, k36, k37, k38, k39, k3a, k3c, k3d, k3e, \
+            k40, k41, k42, k44, k46, k47, k48, k49, k4c, k4d, k4e, k4f \
 ) \
 { \
-    {  k00,   k01,   k02,   k03,   k04,   k05,   k06,   k07}, \
-    {  k10,   k11, KC_NO,   k13,   k14,   k15,   k16,   k17}, \
-    {  k20,   k21, KC_NO,   k23,   k24,   k25, KC_NO,   k27}, \
-    {  k30, KC_NO,   k32,   k33,   k34,   k35,   k36,   k37}, \
-    {  k40,   k41, KC_NO,   k43,   k44, KC_NO,   k46,   k47}, \
-    {  k50,   k51,   k52,   k53,   k54,   k55,   k56,   k57}, \
-    {  k60,   k61,   k62,   k63,   k64,   k65,   k66,   k67}, \
-    {  k70,   k71,   k72,   k73,   k74,   k75, KC_NO,   k77}, \
-    {KC_NO,   k81,   k82,   k83,   k84,   k85,   k86, KC_NO}, \
-    {KC_NO,   k91,   k92, KC_NO,   k94,   k95,   k96,   k97} \
+    {  k00,   k01,   k02,   k03,   k04,   k05,   k06,   k07,   k08,   k09,   k0a,   k0b,   k0c,   k0d,   k0e,   k0f}, \
+    {  k10, KC_NO,   k12,   k13,   k14,   k15,   k16,   k17,   k18,   k19,   k1a,   k1b,   k1c,   k1d,   k1e,   k1f}, \
+    {  k20, KC_NO,   k22,   k23,   k24,   k25, KC_NO,   k27,   k28,   k29,   k2a,   k2b,   k2c,   k2d,   k2e, KC_NO}, \
+    {  k30, KC_NO,   k32,   k33,   k34,   k35,   k36,   k37,   k38,   k39,   k3a, KC_NO,   k3c,   k3d,   k3e, KC_NO}, \
+    {  k40,   k41,   k42, KC_NO,   k44, KC_NO,   k46,   k47,   k48,   k49, KC_NO, KC_NO,   k4c,   k4d,   k4e,   k4f} \
 }

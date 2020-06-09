@@ -33,9 +33,14 @@
 #define KINETIS_SERIAL_USE_UART0 TRUE
 
 /*
- * USB driver settings
+ * USB driver settings.
  */
 #define KINETIS_USB_USE_USB0 TRUE
+
+/*
+ * PWM driver settings.
+ */
+#define KINETIS_PWM_USE_FTM0 TRUE
 
 /* Need to redefine this, since the default (configured for K20x) might not apply
  *   2 for Teensy LC

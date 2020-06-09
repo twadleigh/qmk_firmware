@@ -16,287 +16,148 @@
  */
 
 #include "tp69.h"
-/* #include "ps2.h" */
+#include "quantum.h"
+#include "backlight.h"
+#include "debug.h"
 
-/* #define FIX(pin) setPinOutput(PS2_##pin) */
-/* #define FLOAT(pin) setPinInputHigh(PS2_##pin) */
-/* #define SET(pin) writePinHigh(PS2_##pin) */
-/* #define CLEAR(pin) writePinLow(PS2_##pin) */
-/* #define READ(pin) readPin(PS2_##pin) */
-/* #define ISR_SYS_LOCK osalSysLockFromISR */
-/* #define ISR_SYS_UNLOCK osalSysUnlockFromISR */
-/* #define SYS_LOCK osalSysLock */
-/* #define SYS_UNLOCK osalSysUnlock */
+static void breathing_callback(PWMDriver *pwmp);
 
-/* #define TIME_T systime_t */
-/* #define TIME_T_DEFAULT 0 */
-/* #define NOW() osalOsGetSystemTimeX() */
-/* #define DIFF_US(t, t0) TIME_I2US(t - t0) */
+#define BACKLIGHT_LED_COUNT 5
+static uint32_t g_backlight_lines[BACKLIGHT_LED_COUNT] = {
+    LINE_PIN23, LINE_PIN22, LINE_PIN21, LINE_PIN20, LINE_PIN5 };
+static pwmchannel_t g_backlight_channels[BACKLIGHT_LED_COUNT] = {1, 0, 6, 5, 7};
+static PWMConfig g_pwm_config;
 
-/* #define ISR_DEFN() OSAL_IRQ_HANDLER(KINETIS_PORTC_IRQ_VECTOR) */
-/* #define ISR_PROLOGUE OSAL_IRQ_PROLOGUE */
-/* #define ISR_EPILOGUE OSAL_IRQ_EPILOGUE */
+// See http://jared.geek.nz/2013/feb/linear-led-pwm
+static uint16_t cie_lightness(uint16_t v) {
+    if (v <= 5243)     // if below 8% of max
+        return v / 9;  // same as dividing by 900%
+    else {
+        uint32_t y = (((uint32_t)v + 10486) << 8) / (10486 + 0xFFFFUL);  // add 16% of max and compare
+        // to get a useful result with integer division, we shift left in the expression above
+        // and revert what we've done again after squaring.
+        y = y * y * y >> 8;
+        if (y > 0xFFFFUL)  // prevent overflow
+            return 0xFFFFU;
+        else
+            return (uint16_t)y;
+    }
+}
 
-/* #define INIT_ISR() do {                                                 \ */
-/*         nvicEnableVector(PINCD_IRQn, 3);                                \ */
-/*         PORTC->PCR[TEENSY_PIN23] &= ~PORTx_PCRn_IRQC_MASK;              \ */
-/*         PORTC->PCR[TEENSY_PIN23] |= PORTx_PCRn_IRQC(0xA);               \ */
-/*     } while (0) */
+void backlight_init_ports(void) {
 
+    for (int i = 0; i < BACKLIGHT_LED_COUNT; ++i) {
+        palSetLineMode(g_backlight_lines[i], PAL_MODE_ALTERNATIVE_4);
+        g_pwm_config.channels[g_backlight_channels[i]].mode = PWM_OUTPUT_ACTIVE_HIGH;
+    }
+    g_pwm_config.callback = NULL;
+    pwmStart(&PWMD1, &g_pwm_config);
 
-/* #define PBUF_SIZE 32 */
-/* static uint8_t     pbuf[PBUF_SIZE]; */
-/* static uint8_t     pbuf_head = 0; */
-/* static uint8_t     pbuf_tail = 0; */
-/* static inline void pbuf_enqueue(uint8_t data) { */
-/*     ISR_SYS_LOCK(); */
-/*     uint8_t next = (pbuf_head + 1) % PBUF_SIZE; */
-/*     if (next != pbuf_tail) { */
-/*         pbuf[pbuf_head] = data; */
-/*         pbuf_head       = next; */
-/*     } else { */
-/*         print("pbuf: full\n"); */
-/*     } */
-/*     ISR_SYS_UNLOCK(); */
-/* } */
-/* static inline uint8_t pbuf_dequeue(void) { */
-/*     uint8_t val = 0; */
+    backlight_set(get_backlight_level());
+    if (is_backlight_breathing()) {
+        breathing_enable();
+    }
+}
 
-/*     SYS_LOCK(); */
-/*     if (pbuf_head != pbuf_tail) { */
-/*         val       = pbuf[pbuf_tail]; */
-/*         pbuf_tail = (pbuf_tail + 1) % PBUF_SIZE; */
-/*     } */
-/*     SYS_UNLOCK(); */
+void backlight_set(uint8_t level) {
+    if (level == 0) {
+        // Turn backlight off
+        for (int i = 0; i < BACKLIGHT_LED_COUNT; ++i) {
+            pwmDisableChannel(&PWMD1, g_backlight_channels[i]);
+        }
+    } else {
+        // Turn backlight on
+        if (!is_breathing()) {
+            uint32_t duty = (uint32_t)(cie_lightness(0xFFFF * (uint32_t)level / BACKLIGHT_LEVELS));
+            for (int i = 0; i < BACKLIGHT_LED_COUNT; ++i) {
+                pwmEnableChannel(&PWMD1, g_backlight_channels[i], PWM_FRACTION_TO_WIDTH(&PWMD1, 0xFFFF, duty));
+            }
+        }
+    }
+}
 
-/*     return val; */
-/* } */
-/* static inline bool pbuf_has_data(void) { */
-/*     SYS_LOCK(); */
-/*     bool has_data = (pbuf_head != pbuf_tail); */
-/*     SYS_UNLOCK(); */
-/*     return has_data; */
-/* } */
-/* static inline void pbuf_clear(void) { */
-/*     SYS_LOCK(); */
-/*     pbuf_head = pbuf_tail = 0; */
-/*     SYS_UNLOCK(); */
-/* } */
+void backlight_task(void) {}
 
-/* uint8_t ps2_error; */
+#define BREATHING_NO_HALT 0
+#define BREATHING_HALT_OFF 1
+#define BREATHING_HALT_ON 2
+#define BREATHING_STEPS 128
 
-/* // state for communicating tx to ISR without disabling it */
-/* volatile bool g_ps2_tx_commanded; */
-/* volatile uint8_t g_ps2_tx_data; */
+static uint8_t g_breathing_halt = BREATHING_NO_HALT;
+static uint16_t g_breathing_counter = 0;
 
-/* void ps2_host_init(void) { */
-/*     // idle - allow device to send */
-/*     FIX(CLOCK); */
-/*     FIX(DATA); */
-/*     SET(CLOCK); */
-/*     SET(DATA); */
+bool is_breathing(void) { return g_pwm_config.callback != NULL; }
 
-/*     // Initialize and enable IRQ for rising clock edge. */
-/*     // Enabling for rising & falling clock edges is suboptimal */
-/*     // but acceptable because the ISR will explicitly ignore */
-/*     // rising edges. */
-/*     INIT_ISR(); */
+static inline void breathing_min(void) { g_breathing_counter = 0; }
+static inline void breathing_max(void) { g_breathing_counter = get_breathing_period() * 256 / 2; }
 
-/*     // pin state for rx - data & clock: input high */
-/*     // setting clock for input effectively starts the ISR */
-/*     FLOAT(CLOCK); */
-/*     FLOAT(DATA); */
-/* } */
+void breathing_interrupt_enable(void) {
+    pwmStop(&PWMD1);
+    g_pwm_config.callback = breathing_callback;
+    pwmStart(&PWMD1, &g_pwm_config);
+    chSysLockFromISR();
+    pwmEnablePeriodicNotification(&PWMD1);
+    for (int i = 0; i < BACKLIGHT_LED_COUNT; ++i) {
+        pwmEnableChannelI(&PWMD1, g_backlight_channels[i], PWM_FRACTION_TO_WIDTH(&PWMD1, 0xFFFF, 0xFFFF));
+    }
+    chSysUnlockFromISR();
+}
 
-/* uint8_t ps2_host_recv_response(void) { */
-/*     // Command may take 25ms/20ms at most([5]p.46, [3]p.21) */
-/*     uint8_t retry = 25; */
-/*     while (retry-- && !pbuf_has_data()) { */
-/*         wait_ms(1); */
-/*     } */
-/*     return pbuf_dequeue(); */
-/* } */
+void breathing_interrupt_disable(void) {
+    pwmStop(&PWMD1);
+    g_pwm_config.callback = NULL;
+    pwmStart(&PWMD1, &g_pwm_config);
+}
 
-/* uint8_t ps2_host_recv(void) { */
-/*     if (pbuf_has_data()) { */
-/*         ps2_error = PS2_ERR_NONE; */
-/*         return pbuf_dequeue(); */
-/*     } else { */
-/*         ps2_error = PS2_ERR_NODATA; */
-/*         return 0; */
-/*     } */
-/* } */
+void breathing_enable(void) {
+    g_breathing_counter = 0;
+    g_breathing_halt    = BREATHING_NO_HALT;
+    breathing_interrupt_enable();
+}
 
-/* void ps2_host_set_led(uint8_t led) { */
-/*     ps2_host_send(0xED); */
-/*     ps2_host_send(led); */
-/* } */
+void breathing_pulse(void) {
+    if (get_backlight_level() == 0)
+        breathing_min();
+    else
+        breathing_max();
+    g_breathing_halt = BREATHING_HALT_ON;
+    breathing_interrupt_enable();
+}
 
-/* uint8_t ps2_host_send(uint8_t data) { */
-/*     // inihibit receive - suspends ISR */
-/*     FIX(CLOCK); */
-/*     FIX(DATA); */
-/*     CLEAR(CLOCK); */
-/*     SET(DATA); */
-/*     wait_us(100); */
+void breathing_disable(void) {
+    breathing_interrupt_disable();
+    backlight_set(get_backlight_level());
+}
 
-/*     // request to send */
-/*     // ISR ignores rising clock edge even if it is triggered */
-/*     SET(CLOCK); */
-/*     CLEAR(DATA); */
+void breathing_self_disable(void) {
+    if (get_backlight_level() == 0)
+        g_breathing_halt = BREATHING_HALT_OFF;
+    else
+        g_breathing_halt = BREATHING_HALT_ON;
+}
 
-/*     // notify the ISR of send */
-/*     g_ps2_tx_data = data; */
-/*     g_ps2_tx_commanded = true; */
+static const uint8_t breathing_table[BREATHING_STEPS] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 17, 20, 24, 28, 32, 36, 41, 46, 51, 57, 63, 70, 76, 83, 91, 98, 106, 113, 121, 129, 138, 146, 154, 162, 170, 178, 185, 193, 200, 207, 213, 220, 225, 231, 235, 240, 244, 247, 250, 252, 253, 254, 255, 254, 253, 252, 250, 247, 244, 240, 235, 231, 225, 220, 213, 207, 200, 193, 185, 178, 170, 162, 154, 146, 138, 129, 121, 113, 106, 98, 91, 83, 76, 70, 63, 57, 51, 46, 41, 36, 32, 28, 24, 20, 17, 15, 12, 10, 8, 6, 5, 4, 3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-/*     // free the clock - resumes the ISR */
-/*     FLOAT(CLOCK); */
+// Use this before the cie_lightness function.
+static inline uint16_t scale_backlight(uint16_t v) { return v / BACKLIGHT_LEVELS * get_backlight_level(); }
 
-/*     // pin state for tx - data: output; clock: input high */
-/*     // wait for ISR to finish */
-/*     while (g_ps2_tx_commanded) wait_us(1); */
-/*     if (ps2_error) return 0; */
-/*     return ps2_host_recv_response(); */
-/* } */
+static void breathing_callback(PWMDriver *pwmp) {
+    (void)pwmp;
+    uint8_t  breathing_period = get_breathing_period();
+    uint16_t interval         = (uint16_t)breathing_period * 256 / BREATHING_STEPS;
+    // resetting after one period to prevent ugly reset at overflow.
+    g_breathing_counter = (g_breathing_counter + 1) % (breathing_period * 256);
+    uint8_t index     = g_breathing_counter / interval % BREATHING_STEPS;
 
-/* ISR_DEFN() { */
-/*     ISR_PROLOGUE(); */
+    if (((g_breathing_halt == BREATHING_HALT_ON) && (index == BREATHING_STEPS / 2)) || ((g_breathing_halt == BREATHING_HALT_OFF) && (index == BREATHING_STEPS - 1))) {
+        breathing_interrupt_disable();
+    }
 
-/*     static enum { */
-/*         INIT, */
-/*         START, */
-/*         BIT0, */
-/*         BIT1, */
-/*         BIT2, */
-/*         BIT3, */
-/*         BIT4, */
-/*         BIT5, */
-/*         BIT6, */
-/*         BIT7, */
-/*         PARITY, */
-/*         STOP, */
-/*         ACK */
-/*     } state               = INIT; */
-/*     static uint8_t data   = 0; */
-/*     static uint8_t parity = 1; */
-/*     static bool    rx     = true; */
-/*     static TIME_T  prev   = TIME_T_DEFAULT; */
-/*     TIME_T now; */
+    uint32_t duty = cie_lightness(scale_backlight(breathing_table[index] * 256));
 
-/*     // rising edge? skip. */
-/*     if (READ(CLOCK)) { */
-/*         goto SKIP; */
-/*     } */
-
-/*     // get current system time */
-/*     now = NOW(); */
-/*     // if in the middle of tx/rx and more than 100 us have elapsed, raise error. */
-/*     if (INIT != state && DIFF_US(now, prev) > 100) { */
-/*         goto ERROR; */
-/*     } */
-
-/*     if (g_ps2_tx_commanded) { */
-/*         // tx */
-/*         if (rx) { // reset state for tx */
-/*             rx = false; */
-/*             state = INIT; */
-/*             data = g_ps2_tx_data; */
-/*             parity = 1; */
-/*         } */
-/*         ++state; */
-/*         switch (state) { */
-/*             case START: */
-/*                 SET(DATA); */
-/*                 break; */
-/*             case BIT0: */
-/*             case BIT1: */
-/*             case BIT2: */
-/*             case BIT3: */
-/*             case BIT4: */
-/*             case BIT5: */
-/*             case BIT6: */
-/*             case BIT7: */
-/*                 if(data & 0x01) { */
-/*                     SET(DATA); */
-/*                     ++parity; */
-/*                 } else { */
-/*                     CLEAR(DATA); */
-/*                 } */
-/*                 data >>= 1; */
-/*                 break; */
-/*             case PARITY: */
-/*                 if(parity & 0x01) { */
-/*                     SET(DATA); */
-/*                 } else { */
-/*                     CLEAR(DATA); */
-/*                 } */
-/*                 break; */
-/*             case STOP: */
-/*                 SET(DATA); */
-/*                 // return pin state to input/input */
-/*                 FLOAT(DATA); */
-/*                 break; */
-/*             case ACK: */
-/*                 // return ISR state to rx */
-/*                 rx = true; */
-/*                 g_ps2_tx_commanded = false; */
-/*                 if (READ(DATA)) { */
-/*                     goto RESET; */
-/*                 } else { */
-/*                     goto ERROR; */
-/*                 } */
-/*                 break; */
-/*             default: */
-/*                 goto ERROR; */
-/*         } */
-/*         goto RETURN; */
-/*     } else { */
-/*         // rx */
-/*         state++; */
-/*         switch (state) { */
-/*             case START: */
-/*                 if (READ(DATA)) goto ERROR; */
-/*                 break; */
-/*             case BIT0: */
-/*             case BIT1: */
-/*             case BIT2: */
-/*             case BIT3: */
-/*             case BIT4: */
-/*             case BIT5: */
-/*             case BIT6: */
-/*             case BIT7: */
-/*                 data >>= 1; */
-/*                 if (READ(DATA)) { */
-/*                     data |= 0x80; */
-/*                     ++parity; */
-/*                 } */
-/*                 break; */
-/*             case PARITY: */
-/*                 if (READ(DATA)) { */
-/*                     if (!(parity & 0x01)) goto ERROR; */
-/*                 } else { */
-/*                     if (parity & 0x01) goto ERROR; */
-/*                 } */
-/*                 break; */
-/*             case STOP: */
-/*                 if (!READ(DATA)) goto ERROR; */
-/*                 pbuf_enqueue(data); */
-/*                 goto RESET; */
-/*                 break; */
-/*             default: */
-/*                 goto ERROR; */
-/*         } */
-/*         goto RETURN; */
-/*     } */
-/* ERROR: */
-/*     ps2_error = state; */
-/* RESET: */
-/*     state = INIT; */
-/*     data  = 0; */
-/*     parity = 1; */
-/* RETURN: */
-/*     prev = now; */
-/* SKIP: */
-/*     ISR_EPILOGUE(); */
-/*     return; */
-/* } */
+    chSysLockFromISR();
+    for (int i = 0; i < BACKLIGHT_LED_COUNT; ++i) {
+        pwmEnableChannelI(&PWMD1, g_backlight_channels[i], PWM_FRACTION_TO_WIDTH(&PWMD1, 0xFFFF, duty));
+    }
+    chSysUnlockFromISR();
+}
